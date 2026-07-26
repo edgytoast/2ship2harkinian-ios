@@ -1,0 +1,59 @@
+Overlay patch 0017 (reference 0015 rev2 parity): LIVE iOS menu scale via
+2S2H's OWN ScaleImGui (gSohIos.MenuScale multiplies the gSettings.ImGuiScale
+preset; combined-float compare keeps both knobs live, no restart), fatter
+slider grabs on iOS, and the gSohIos.MaxFps battery cap on the
+match-refresh path in GetInterpolationFPS (2S2H CVar name
+gMatchRefreshRate). REPLACES the earlier LUS Gui.cpp patch (deleted): 2S2H's
+ScaleImGui clobbered FontGlobalScale on boot, same root cause the Ship of Harkinian port
+found on device. __IOS__-only.
+
+--- a/mm/2s2h/BenPort.cpp
++++ b/mm/2s2h/BenPort.cpp
+@@ -740,14 +740,31 @@
+ 
+ void OTRGlobals::ScaleImGui() {
+     int32_t imGuiScaleIndex = CVarGetInteger("gSettings.ImGuiScale", defaultImGuiScale);
++#ifdef __IOS__
++    // SOH_IOS (overlay 0017): gSohIos.MenuScale multiplies the preset for
++    // fine phone-fit control. Comparing the combined float (not the index)
++    // keeps upstream's ratio mechanism and makes BOTH knobs apply live.
++    float scale = imguiScaleOptionToValue[imGuiScaleIndex] * CVarGetFloat("gSohIos.MenuScale", 0.85f);
++    if (scale == previousImGuiScale) {
++        return;
++    }
++#else
+     if (imGuiScaleIndex == previousImGuiScaleIndex) {
+         return;
+     }
+ 
+     float scale = imguiScaleOptionToValue[imGuiScaleIndex];
++#endif
+     float newScale = scale / previousImGuiScale;
+     ImGui::GetStyle().ScaleAllSizes(newScale);
+     ImGui::GetIO().FontGlobalScale = scale;
++#ifdef __IOS__
++    // Finger-sized slider grabs regardless of scale (sliders were hard to
++    // drag on device).
++    if (ImGui::GetStyle().GrabMinSize < 22.0f) {
++        ImGui::GetStyle().GrabMinSize = 22.0f;
++    }
++#endif
+     previousImGuiScale = scale;
+     previousImGuiScaleIndex = imGuiScaleIndex;
+ }
+@@ -773,7 +790,15 @@
+ 
+ uint32_t OTRGlobals::GetInterpolationFPS() {
+     if (CVarGetInteger("gMatchRefreshRate", 0)) {
++#ifdef __IOS__
++        // SOH_IOS (overlay 0017): battery-saver cap — gSohIos.MaxFps combo
++        // index 0 = 60 fps, 1 = 120 fps (default).
++        uint32_t sohIosCap = CVarGetInteger("gSohIos.MaxFps", 1) == 0 ? 60 : 120;
++        uint32_t sohIosRate = Ship::Context::GetInstance()->GetWindow()->GetCurrentRefreshRate();
++        return sohIosRate < sohIosCap ? sohIosRate : sohIosCap;
++#else
+         return Ship::Context::GetInstance()->GetWindow()->GetCurrentRefreshRate();
++#endif
+     } else if (CVarGetInteger(CVAR_VSYNC_ENABLED, 1) ||
+                !Ship::Context::GetInstance()->GetWindow()->CanDisableVerticalSync()) {
+         return std::min<uint32_t>(Ship::Context::GetInstance()->GetWindow()->GetCurrentRefreshRate(),

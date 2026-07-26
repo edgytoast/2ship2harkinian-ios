@@ -1,0 +1,49 @@
+Overlay patch 0038: flat-stereo sentinels around MM's A-button cube.
+User device finding (Phase-02 acceptance, 2026-07-20): the whole HUD is
+correctly flat EXCEPT the blue A button — it jiggles/doubles with camera
+motion. Root cause: MM's do-action button is the ROTATING CUBE, drawn
+under a real perspective sub-view (Interface_SetPerspectiveView +
+aButtonRoll), so the stereo injector's perspective-detect treats it as
+world geometry and applies eye offsets — displacing it hugely relative to
+its tiny 10-60-unit view volume. OoT's action icon is flat, so the
+reference never hit this. Fix: bracket Interface_DrawAButton's DL emission
+with the 0x5C/0x5D force-flat G_NOOP sentinels (0034 rev2 interpreter
+support — same mechanism as the skybox's 0x5A/0x5B, but ZERO stereo
+rather than skew-only: the button belongs ON the panel like the rest of
+the HUD). Tags ride OVERLAY_DISP (the HUD's list; the interpreter's noop
+handler is list-agnostic). __IOS__-gated; desktop output unchanged.
+
+--- a/mm/src/code/z_parameter.c
++++ b/mm/src/code/z_parameter.c
+@@ -6627,6 +6627,15 @@
+     }
+ 
+     Gfx_SetupDL42_Overlay(play->state.gfxCtx);
++
++#ifdef __IOS__
++    /* SOH_IOS (overlay 0038): force-flat stereo BEGIN sentinel (see header). */
++    {
++        Gfx* sohTag = OVERLAY_DISP++;
++        sohTag->words.w0 = (uintptr_t)((G_NOOP << 24) | (0x5C << 16));
++        sohTag->words.w1 = 0;
++    }
++#endif
+ 
+     Interface_SetPerspectiveView(play, 25 + R_A_BTN_Y_OFFSET, 70 + R_A_BTN_Y_OFFSET, 192, 237);
+ 
+@@ -6694,6 +6703,15 @@
+ 
+     gDPPipeSync(OVERLAY_DISP++);
+ 
++#ifdef __IOS__
++    /* SOH_IOS (overlay 0038): force-flat stereo END sentinel. */
++    {
++        Gfx* sohTag = OVERLAY_DISP++;
++        sohTag->words.w0 = (uintptr_t)((G_NOOP << 24) | (0x5D << 16));
++        sohTag->words.w1 = 0;
++    }
++#endif
++
+     // This is needed as `Interface_DrawPauseMenuEquippingIcons` is call immediately
+     // after `Interface_DrawAButton`, which sets the view to perspective mode
+     Interface_SetOrthoView(interfaceCtx);

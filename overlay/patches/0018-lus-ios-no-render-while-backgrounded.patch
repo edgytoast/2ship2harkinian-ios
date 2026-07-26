@@ -1,0 +1,51 @@
+Overlay patch 0018 (rev2, reference 0016 parity): never render while
+backgrounded — park the game thread off nextDrawable, ticking the main run
+loop via the shell's SohIos_ParkTick (a sleeping park self-deadlocks: the
+game loop IS the main thread on iOS, so the lifecycle event that clears the
+flag can never deliver — reference device black-screen root cause). Null-
+drawable retry + frame skip kept from rev1. Disjoint from 0010 and 0021
+hunks (D6). __IOS__-only.
+
+--- a/libultraship/src/fast/backends/gfx_metal.cpp
++++ b/libultraship/src/fast/backends/gfx_metal.cpp
+@@ -619,9 +619,40 @@
+     return (int)index;
+ }
+ 
++#ifdef __IOS__
++// SOH_IOS (overlay 0018): shell-provided background flag + park tick
++// (linkage specs must live at file scope, not inside the function).
++extern "C" int SohIos_IsBackgrounded(void);
++extern "C" void SohIos_ParkTick(void);
++#endif
++
+ void GfxRenderingAPIMetal::SetupScreenFramebuffer(uint32_t width, uint32_t height) {
+     mCurrentDrawable = nullptr;
++#ifdef __IOS__
++    // Park the game thread while backgrounded — nextDrawable in the
++    // background stalls/times out (post-resume slowdown, watchdog risk).
++    // The process suspends moments later and resumes here.
++    {
++        // ParkTick services the main run loop (the game loop IS the main
++        // thread on iOS) so the lifecycle events that clear the flag can
++        // deliver — a sleeping park here deadlocks into a black screen.
++        while (SohIos_IsBackgrounded()) {
++            SohIos_ParkTick();
++        }
++        const struct timespec sohIosRetryNap = { 0, 10 * 1000 * 1000 };
++        for (int i = 0; i < 100 && mCurrentDrawable == nullptr; i++) {
++            mCurrentDrawable = mLayer->nextDrawable();
++            if (mCurrentDrawable == nullptr) {
++                nanosleep(&sohIosRetryNap, nullptr); // pool drained (just resumed?)
++            }
++        }
++        if (mCurrentDrawable == nullptr) {
++            return; // skip the frame rather than crash on ->texture()
++        }
++    }
++#else
+     mCurrentDrawable = mLayer->nextDrawable();
++#endif
+ 
+     bool msaa_enabled = Ship::Context::GetInstance()->GetConsoleVariables()->GetInteger("gMSAAValue", 1) > 1;
+ 

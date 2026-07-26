@@ -1,0 +1,142 @@
+Overlay 0042: kill the multi-second boot black screen caused by
+2S2H's DynamicCosmeticEditor scanning the ENTIRE mods archive at startup.
+
+ROOT CAUSE (profiled on-device + sim, 2026-07-24): ScanDynamicCosmetics()
+runs once at boot (RefreshDynamicCosmeticsStateIfNeeded, signature-gated) and
+does `ListFiles("*")` then, for EVERY file in every custom archive, calls
+LoadFile() (zip_fread — decompresses the whole file) just to try parsing it
+as a cosmetic-material XML. With a big texture pack that means reading the
+WHOLE pack every launch: the user's 4K MM Reloaded pack = ~13 s of pure
+zip_fread on the game thread before the first frame (audio underruns to 0).
+SoH never pays this (no DynamicCosmeticEditor). Shaders/archive-index are
+INNOCENT (they were warm/6 ms while this ran).
+
+FIX: a cosmetic material is a tiny XML DisplayList; textures are megabytes
+(this pack: 5011 files >256 KB totalling 2.58 GB, vs 4921 small files at
+340 MB). Skip files too large to be a material BEFORE loading them, using a
+cheap size query (zip_stat reads the central directory already in memory — no
+decompress). Adds Archive::GetFileSize (base default UINT64_MAX = "unknown,
+don't skip"), O2rArchive override (zip_stat only), and
+ArchiveManager::GetFileSize(path). The scan filter is __IOS__-gated so the
+macOS build stays byte-identical; the LUS additions are additive (new
+method, no behavior change) so they compile everywhere.
+
+Verify: sim boot with the 4K pack drops from ~13 s to ~2 s (launch->first
+Cutscene_HandleConditionalTriggers), and a cosmetic pack's materials still
+register (they're < the threshold).
+
+--- a/libultraship/include/ship/resource/archive/Archive.h
++++ b/libultraship/include/ship/resource/archive/Archive.h
+@@ -31,6 +31,12 @@
+ 
+     virtual std::shared_ptr<File> LoadFile(const std::string& filePath) = 0;
+     virtual std::shared_ptr<File> LoadFile(uint64_t hash) = 0;
++    // SOH_IOS (overlay 0042): uncompressed size of a file WITHOUT loading it
++    // (cheap central-directory stat). Default = unknown, so callers that use
++    // it as a skip-hint never skip on archive types that don't implement it.
++    virtual uint64_t GetFileSize(uint64_t hash) {
++        return UINT64_MAX;
++    }
+     std::shared_ptr<std::unordered_map<uint64_t, std::string>> ListFiles();
+     std::shared_ptr<std::unordered_map<uint64_t, std::string>> ListFiles(const std::string& filter);
+     bool HasFile(const std::string& filePath);
+--- a/libultraship/include/ship/resource/archive/O2rArchive.h
++++ b/libultraship/include/ship/resource/archive/O2rArchive.h
+@@ -26,6 +26,7 @@
+ 
+     std::shared_ptr<File> LoadFile(const std::string& filePath);
+     std::shared_ptr<File> LoadFile(uint64_t hash);
++    uint64_t GetFileSize(uint64_t hash) override; // SOH_IOS (overlay 0042): zip_stat, no decompress
+ 
+   private:
+     zip_t* mZipArchive;
+--- a/libultraship/src/ship/resource/archive/O2rArchive.cpp
++++ b/libultraship/src/ship/resource/archive/O2rArchive.cpp
+@@ -66,6 +66,31 @@
+     return fileToLoad;
+ }
+ 
++// SOH_IOS (overlay 0042): uncompressed size WITHOUT loading the file. Only
++// zip_stat (reads the in-memory central directory) — no zip_fopen/zip_fread,
++// so it's ~free per file. Lets the cosmetic scan skip multi-MB textures
++// instead of decompressing the whole pack at boot.
++uint64_t O2rArchive::GetFileSize(uint64_t hash) {
++    if (mZipArchive == nullptr) {
++        return UINT64_MAX;
++    }
++    const std::string* filePath =
++        Context::GetInstance()->GetResourceManager()->GetArchiveManager()->HashToString(hash);
++    if (filePath == nullptr) {
++        return UINT64_MAX;
++    }
++    auto zipEntryIndex = zip_name_locate(mZipArchive, filePath->c_str(), 0);
++    if (zipEntryIndex < 0) {
++        return UINT64_MAX;
++    }
++    struct zip_stat zipEntryStat;
++    zip_stat_init(&zipEntryStat);
++    if (zip_stat_index(mZipArchive, zipEntryIndex, 0, &zipEntryStat) != 0) {
++        return UINT64_MAX;
++    }
++    return (uint64_t)zipEntryStat.size;
++}
++
+ bool O2rArchive::Open() {
+     mZipArchive = zip_open(GetPath().c_str(), ZIP_CREATE, nullptr);
+     if (mZipArchive == nullptr) {
+--- a/libultraship/include/ship/resource/archive/ArchiveManager.h
++++ b/libultraship/include/ship/resource/archive/ArchiveManager.h
+@@ -30,6 +30,7 @@
+     bool IsLoaded();
+     std::shared_ptr<File> LoadFile(const std::string& filePath);
+     std::shared_ptr<File> LoadFile(uint64_t hash);
++    uint64_t GetFileSize(const std::string& filePath); // SOH_IOS (overlay 0042)
+     bool WriteFile(std::shared_ptr<Archive> archive, const std::string& filename, const std::vector<uint8_t>& data);
+     bool HasFile(const std::string& filePath);
+     bool HasFile(uint64_t hash);
+--- a/libultraship/src/ship/resource/archive/ArchiveManager.cpp
++++ b/libultraship/src/ship/resource/archive/ArchiveManager.cpp
+@@ -67,6 +67,17 @@
+     return archive->LoadFile(hash);
+ }
+ 
++// SOH_IOS (overlay 0042): file size without loading it (skip-hint for the
++// cosmetic scan). UINT64_MAX = unknown (missing, or an archive type that
++// doesn't implement it) so callers never skip on unknown.
++uint64_t ArchiveManager::GetFileSize(const std::string& filePath) {
++    auto it = mFileToArchive.find(CRC64(filePath.c_str()));
++    if (it == mFileToArchive.end() || it->second == nullptr) {
++        return UINT64_MAX;
++    }
++    return it->second->GetFileSize(CRC64(filePath.c_str()));
++}
++
+ bool ArchiveManager::HasFile(const std::string& filePath) {
+     return HasFile(CRC64(filePath.c_str()));
+ }
+--- a/mm/2s2h/BenGui/DynamicCosmeticEditor.cpp
++++ b/mm/2s2h/BenGui/DynamicCosmeticEditor.cpp
+@@ -422,7 +422,23 @@
+     for (const auto& materialPath : *materialPaths) {
+         if (!IsCustomArchive(archiveManager->GetArchiveFromFile(materialPath))) {
+             continue;
++        }
++
++#ifdef __IOS__
++        // SOH_IOS (overlay 0042): a cosmetic material is a small XML DisplayList;
++        // textures are megabytes. Skip anything too big to be a material BEFORE
++        // LoadFile decompresses it — this scan otherwise reads the ENTIRE texture
++        // pack at boot (the user's 4K pack = ~13 s black screen, game thread
++        // blocked in zip_fread, audio underrunning). GetFileSize is a cheap
++        // zip_stat; UINT64_MAX (unknown) is NOT skipped.
++        {
++            const uint64_t sohIosMaxMaterialBytes = 262144; // 256 KB (real material XML is < 16 KB)
++            uint64_t sohIosSize = archiveManager->GetFileSize(materialPath);
++            if (sohIosSize != UINT64_MAX && sohIosSize > sohIosMaxMaterialBytes) {
++                continue;
++            }
+         }
++#endif
+ 
+         tinyxml2::XMLDocument document;
+         std::shared_ptr<Fast::DisplayList> material;

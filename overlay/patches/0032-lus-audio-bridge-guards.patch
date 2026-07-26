@@ -1,0 +1,90 @@
+Overlay patch 0032 (reference 0027 regenerated): audio bridge null-CHAIN
+guards. Recurring reference Vision Pro SEGV (crash.txt, twice):
+AudioPlayerBuffered+32 on OTRAudio_Thread — the bridge null-checks the
+PLAYER but not the chain; Context()->GetAudio() is null during
+init/teardown windows and ->GetAudioPlayer() on it faults. Guard the
+chain in every bridge function the audio thread can hit (all six here).
+Regenerated: this fork uses GetInstance() (shared_ptr), not the
+reference's GetRawInstance() — the "applies clean != compiles" fork delta
+from the original audit, now load-bearing.
+
+--- a/libultraship/src/libultraship/bridge/audiobridge.cpp
++++ b/libultraship/src/libultraship/bridge/audiobridge.cpp
+@@ -5,7 +5,11 @@
+ extern "C" {
+ 
+ int32_t AudioPlayerBuffered() {
+-    auto audio = Ship::Context::GetInstance()->GetAudio()->GetAudioPlayer();
++    auto sohIosCtx = Ship::Context::GetInstance();
++    if (sohIosCtx == nullptr || sohIosCtx->GetAudio() == nullptr) {
++        return 0;
++    }
++    auto audio = sohIosCtx->GetAudio()->GetAudioPlayer();
+     if (audio == nullptr) {
+         return 0;
+     }
+@@ -18,7 +22,11 @@
+ }
+ 
+ int32_t AudioPlayerGetDesiredBuffered() {
+-    auto audio = Ship::Context::GetInstance()->GetAudio()->GetAudioPlayer();
++    auto sohIosCtx = Ship::Context::GetInstance();
++    if (sohIosCtx == nullptr || sohIosCtx->GetAudio() == nullptr) {
++        return 0;
++    }
++    auto audio = sohIosCtx->GetAudio()->GetAudioPlayer();
+     if (audio == nullptr) {
+         return 0;
+     }
+@@ -31,7 +39,11 @@
+ }
+ 
+ AudioChannelsSetting GetAudioChannels() {
+-    auto audio = Ship::Context::GetInstance()->GetAudio()->GetAudioPlayer();
++    auto sohIosCtx = Ship::Context::GetInstance();
++    if (sohIosCtx == nullptr || sohIosCtx->GetAudio() == nullptr) {
++        return audioStereo;
++    }
++    auto audio = sohIosCtx->GetAudio()->GetAudioPlayer();
+ 
+     if (audio == nullptr) {
+         return audioStereo;
+@@ -41,7 +53,11 @@
+ }
+ 
+ int32_t GetNumAudioChannels() {
+-    auto audio = Ship::Context::GetInstance()->GetAudio()->GetAudioPlayer();
++    auto sohIosCtx = Ship::Context::GetInstance();
++    if (sohIosCtx == nullptr || sohIosCtx->GetAudio() == nullptr) {
++        return 2;
++    }
++    auto audio = sohIosCtx->GetAudio()->GetAudioPlayer();
+ 
+     if (audio == nullptr) {
+         return 2;
+@@ -51,7 +67,11 @@
+ }
+ 
+ void AudioPlayerPlayFrame(const uint8_t* buf, size_t len) {
+-    auto audio = Ship::Context::GetInstance()->GetAudio()->GetAudioPlayer();
++    auto sohIosCtx = Ship::Context::GetInstance();
++    if (sohIosCtx == nullptr || sohIosCtx->GetAudio() == nullptr) {
++        return;
++    }
++    auto audio = sohIosCtx->GetAudio()->GetAudioPlayer();
+     if (audio == nullptr) {
+         return;
+     }
+@@ -64,7 +84,11 @@
+ }
+ 
+ void SetAudioChannels(AudioChannelsSetting channels) {
+-    auto audio = Ship::Context::GetInstance()->GetAudio();
++    auto sohIosCtx = Ship::Context::GetInstance();
++    if (sohIosCtx == nullptr) {
++        return;
++    }
++    auto audio = sohIosCtx->GetAudio();
+     if (audio == nullptr) {
+         return;
+     }

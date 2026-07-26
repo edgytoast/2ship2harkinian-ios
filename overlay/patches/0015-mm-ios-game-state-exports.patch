@@ -1,0 +1,79 @@
+Overlay patch 0015 (rev2, reference 0013 parity): game-state exports for the
+iOS shell — menu visibility, Kaleido pause, active seq ids, title/demo
+context (menu button policy), the menu scroll queue (overlay 0020 consumes),
+and ImGui popup-open. Appended at EOF of BenPort.cpp (shares no hunks with
+0008 — D6). Fork deltas: GetInstance() (no GetRawInstance in 7f2baa10),
+mm's sequence.h / gSaveContext.fileNum. __IOS__-only.
+
+--- a/mm/2s2h/BenPort.cpp
++++ b/mm/2s2h/BenPort.cpp
+@@ -2390,4 +2390,69 @@
+     });
+ 
+     return true;
++}
++
++#ifdef __IOS__
++// SOH_IOS (overlay 0015 rev2; reference 0013 analog): game-state exports for
++// the shell. Polled from the UIKit main thread, which on iOS interleaves
++// with (never runs beside) the SDL game loop.
++#include "sequence.h"
++extern "C" int SohIos_IsMenuOpen(void) {
++    auto ctx = Ship::Context::GetInstance();
++    if (ctx == nullptr) {
++        return 0;
++    }
++    auto wnd = ctx->GetWindow();
++    if (wnd == nullptr) {
++        return 0;
++    }
++    auto gui = wnd->GetGui();
++    if (gui == nullptr) {
++        return 0;
++    }
++    return gui->GetMenuOrMenubarVisible() ? 1 : 0;
+ }
++
++// Kaleido (game pause) state: drives the controller-mode policy where the
++// shell's menu button appears only while the game is paused.
++extern "C" int SohIos_IsGamePaused(void) {
++    return (gPlayState != NULL && gPlayState->pauseCtx.state != 0) ? 1 : 0;
++}
++
++// Active BGM (player 0) and fanfare (player 3) seq ids — music diagnostics
++// for the console bridge's `seq` command.
++extern "C" uint32_t SohIos_ActiveSeqIds(void) {
++    return ((uint32_t)gActiveSeqs[0].seqId) | (((uint32_t)gActiveSeqs[3].seqId) << 16);
++}
++
++// Title/intro context: boot, title attract, and file select run with
++// gPlayState NULL or the demo save (fileNum 0xFF) — the shell keeps the
++// menu button visible there and hides it during normal gameplay.
++extern "C" int SohIos_IsTitleOrDemo(void) {
++    return (gPlayState == NULL || gSaveContext.fileNum == 0xFF) ? 1 : 0;
++}
++
++// Touch scrolling for the menu (overlay 0020 consumes): the shell queues
++// finger scroll deltas here; Menu.cpp's scrollable children take them if
++// the finger is horizontally inside the child. Main-thread only.
++static float sSohIosMenuScrollDy = 0.0f;
++static float sSohIosMenuScrollX = -1.0f;
++extern "C" void SohIos_QueueMenuScroll(float x, float dy) {
++    sSohIosMenuScrollX = x;
++    sSohIosMenuScrollDy += dy;
++}
++extern "C" float SohIos_TakeMenuScrollFor(float winX, float winW) {
++    if (sSohIosMenuScrollDy == 0.0f || sSohIosMenuScrollX < winX || sSohIosMenuScrollX >= winX + winW) {
++        return 0.0f;
++    }
++    float dy = sSohIosMenuScrollDy;
++    sSohIosMenuScrollDy = 0.0f;
++    return dy;
++}
++
++// Any ImGui popup open (extractor prompts, quit confirm, ...): the touch
++// overlay must yield ALL input so popup buttons are tappable.
++extern "C" int SohIos_IsPopupOpen(void) {
++    return ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel) ? 1 : 0;
++}
++#endif

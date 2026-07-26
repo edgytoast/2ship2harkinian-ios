@@ -1,0 +1,36 @@
+Overlay patch 0026: save-write probe (stutter round 2). MM autosaves at
+owl statues and transitions; SaveManager_WriteSaveFile serializes the full
+save as INDENTED json and writes it synchronously on the calling thread —
+if that caller is the game thread, it is a prime suspect for the
+"occasional, no visible pattern" 100-600 ms frames round 1 left unexplained.
+Every save logs SOH_SAVE with ms + filename (saves are rare; no threshold).
+__IOS__-only.
+
+--- a/mm/2s2h/SaveManager/SaveManager.cpp
++++ b/mm/2s2h/SaveManager/SaveManager.cpp
+@@ -106,6 +106,13 @@
+ }
+ 
+ void SaveManager_WriteSaveFile(const std::filesystem::path& fileName, nlohmann::json j) {
++#ifdef __IOS__
++    // SOH_IOS (overlay 0026): time the synchronous save write — pretty-
++    // printed JSON serialization + filesystem write on the calling thread
++    // is a stutter suspect (MM autosaves at owls/transitions). Every save
++    // logs; saves are rare.
++    auto sohIosSaveT0 = std::chrono::steady_clock::now();
++#endif
+     const std::filesystem::path filePath = savesFolderPath / fileName;
+ 
+     if (!std::filesystem::exists(savesFolderPath)) {
+@@ -117,6 +124,11 @@
+         o << std::setw(4) << j << std::endl;
+         o.close();
+     } catch (...) { SPDLOG_ERROR("Failed to write save file"); }
++#ifdef __IOS__
++    SPDLOG_INFO("SOH_SAVE {:.1f}ms {}",
++                std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - sohIosSaveT0).count(),
++                fileName.string());
++#endif
+ }
+ 
+ void SaveManager_DeleteSaveFile(const std::filesystem::path& fileName) {

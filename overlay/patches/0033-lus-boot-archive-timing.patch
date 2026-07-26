@@ -1,0 +1,56 @@
+Overlay patch 0033: SOH_BOOT per-archive open timing. VP cold boot showed
+an 11-second silent gap before the first frame (user-visible black screen)
+— the synchronous zip central-directory indexing of the multi-GB 4K pack
+o2r, whose path is logged but never its duration. Each archive->Load() now
+logs SOH_BOOT with ms; the shell's boot curtain (same build) covers the
+UX. Warm relaunches take 2.5 s (page cache) — if the cold number is all
+central-directory reads, an index cache is the round-2 fix; if it's
+something else, this line says so. __IOS__-only.
+
+--- a/libultraship/src/ship/resource/archive/ArchiveManager.cpp
++++ b/libultraship/src/ship/resource/archive/ArchiveManager.cpp
+@@ -1,5 +1,16 @@
+ #include "ship/resource/archive/ArchiveManager.h"
+ 
++#ifdef __IOS__
++#include <chrono>
++// SOH_IOS (overlay 0033 rev2): archive init runs BEFORE the file logger
++// exists (sim-verified: neither upstream's "Reading archive" nor rev1's
++// inline SOH_BOOT line ever reached the log file) — accumulate the
++// timings and expose them; the shell's bridge `boot` command reads this.
++static std::string sSohIosBootReport;
++extern "C" const char* SohIos_BootArchiveReport(void) {
++    return sSohIosBootReport.c_str();
++}
++#endif
+ #include <filesystem>
+ #include "spdlog/spdlog.h"
+ 
+@@ -259,7 +270,27 @@
+         archive = std::make_shared<O2rArchive>(archivePath);
+     }
+ 
++#ifdef __IOS__
++    // SOH_IOS (overlay 0033): archive open = synchronous zip
++    // central-directory indexing; a multi-GB 4K pack takes SECONDS and was
++    // the silent phase of the VP cold-boot black screen. Named per-archive
++    // so the boot budget is attributable.
++    {
++        auto sohIosT0 = std::chrono::steady_clock::now();
++        archive->Load();
++        double sohIosMs =
++            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - sohIosT0).count();
++        // The inline log line dies pre-logger; the accumulated report is
++        // the artifact (bridge `boot`).
++        SPDLOG_INFO("SOH_BOOT archive {} loaded in {:.0f} ms", path.string(), sohIosMs);
++        char sohIosBuf[512];
++        snprintf(sohIosBuf, sizeof(sohIosBuf), "%s%s=%.0fms", sSohIosBootReport.empty() ? "" : " ",
++                 path.filename().string().c_str(), sohIosMs);
++        sSohIosBootReport += sohIosBuf;
++    }
++#else
+     archive->Load();
++#endif
+     return AddArchive(archive);
+ }
+ 

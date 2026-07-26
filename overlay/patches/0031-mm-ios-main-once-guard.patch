@@ -1,0 +1,33 @@
+Overlay patch 0031 (reference 0026 regenerated for MM's main.c): the
+engine boots once per process, period. visionOS scene reconnects
+(window-resize stress) re-invoked the process entry and re-ran main()
+in-process on the Ship of Harkinian port — twin boots, twin audio threads racing one
+device. Guard at the chokepoint every UIKit path must cross: SDL_main.
+The shell separately re-attaches the existing SDL window to a
+reconnected scene. Regenerated: MM has a single SDL_main definition (no
+_WIN32 split) with C locals at function top.
+
+--- a/mm/src/code/main.c
++++ b/mm/src/code/main.c
+@@ -54,6 +54,21 @@
+ #endif
+ 
+ int SDL_main(int argc, char* argv[] /* void* arg*/) {
++#ifdef __IOS__
++    /* SOH_IOS (overlay 0031): visionOS scene reconnects re-invoke the
++     * process entry through multiple UIKit paths; a second in-process boot
++     * restarts the game from the intro and leaves twin audio threads racing
++     * one device (reference device log: two boots 55 s apart, Console
++     * singleton alive across them). The engine boots once per process,
++     * guarded at the chokepoint every path must cross. */
++    {
++        static int sohIosMainRan = 0;
++        if (sohIosMainRan) {
++            return 0;
++        }
++        sohIosMainRan = 1;
++    }
++#endif
+     intptr_t fb;
+     intptr_t sysHeap;
+     s32 exit;

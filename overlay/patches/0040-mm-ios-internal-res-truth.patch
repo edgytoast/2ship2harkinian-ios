@@ -1,0 +1,41 @@
+Overlay 0040 (rev2 — the "renders at native" claim was WRONG: the game
+shipped SUB-NATIVE, fixed by 0041 SSAA; this line now points at the real
+Supersampling control). reference 0024 ported to MM's BenMenu: Internal
+Resolution display on iOS/visionOS. The slider's only consumer,
+Window::SetResolutionMultiplier -> Fast3dGui's ImGui game-window viewport,
+NEVER runs on iOS/visionOS — these builds always render at the display's
+native drawable (iPhone A/B verified identical pixels at 100%/200%; Vision
+Pro log-verified 3840x2160). A slider stuck at "100%" reads as half-res to
+anyone who knows desktop 2S2H, and persisting a multiplier is a landmine:
+it scales POINTS, so if a future LUS pin ever activates the consumer it
+would SHRINK the render. Replace the dead slider with a static truth line
+on __IOS__ (covers visionOS — same define, overlay 0027).
+MM delta vs reference: BenMenu's widget is the "%.0f%%" format string with a
+PreFunc/Callback chain (SohGui's was plainer); the whole AddWidget(...)
+statement is wrapped, not just the slider tail.
+
+--- a/mm/2s2h/BenGui/BenMenu.cpp
++++ b/mm/2s2h/BenGui/BenMenu.cpp
+@@ -525,6 +525,7 @@
+     AddWidget(path, "Toggle Fullscreen", WIDGET_BUTTON)
+         .Callback([](WidgetInfo& info) { Ship::Context::GetInstance()->GetWindow()->ToggleFullscreen(); })
+         .Options(ButtonOptions().Tooltip("Toggles Fullscreen On/Off."));
++#ifndef __IOS__
+     AddWidget(path, "Internal Resolution: %.0f%%", WIDGET_CVAR_SLIDER_FLOAT)
+         .CVar(CVAR_INTERNAL_RESOLUTION)
+         .Callback([](WidgetInfo& info) {
+@@ -549,6 +550,14 @@
+                 .Format("")
+                 .Min(0.5f)
+                 .Max(2.0f));
++#else
++    // SOH_IOS (overlay 0040): the multiplier's only consumer is the desktop
++    // ImGui game-window viewport, which never runs on iOS/visionOS — these
++    // builds always render at the display's native drawable (device-verified;
++    // Vision Pro: 3840x2160). Show the truth instead of a dead slider.
++    AddWidget(path, "Internal Resolution: use Supersampling (SSAA) in the iOS settings — this desktop slider has no effect here",
++              WIDGET_SEPARATOR_TEXT);
++#endif
+ #ifndef __WIIU__
+     AddWidget(path, "Anti-aliasing (MSAA): %d", WIDGET_CVAR_SLIDER_INT)
+         .CVar(CVAR_MSAA_VALUE)

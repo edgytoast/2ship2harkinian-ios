@@ -1,0 +1,76 @@
+Overlay patch 0025 (rev2): synchronous resource-load probe with per-window
+AGGREGATES and failure-path timing. Round 1 falsified the single-big-file
+hypothesis (4 windows with 100-560 ms frames, zero >10 ms loads during
+them) and exposed two probe holes: bursts of small loads sum invisibly
+under a per-file threshold, and failed alt-pack lookups early-return
+before the timer (a texture pack makes EVERY load try alt/ first). rev2
+accumulates all load time + count into atomics the 0008 probe reports as
+load_ms/loads per window; >10 ms singles still log named (MISS-tagged for
+failures). Cache hits still pay nothing. __IOS__-only.
+
+--- a/libultraship/src/ship/resource/ResourceManager.cpp
++++ b/libultraship/src/ship/resource/ResourceManager.cpp
+@@ -1,5 +1,20 @@
+ #include "ship/resource/ResourceManager.h"
+ #include <spdlog/spdlog.h>
++#ifdef __IOS__
++#include <atomic>
++#include <chrono>
++// SOH_IOS (overlay 0025 rev2): per-window aggregate of synchronous load
++// time — round 1 proved single loads rarely cross 10 ms, but a burst of
++// small loads (room transition) or failed alt-pack lookups can sum to a
++// 100-600 ms frame invisibly. The 0008 probe reads/resets via
++// SohIos_LoadStats.
++static std::atomic<uint64_t> sSohIosLoadUs{ 0 };
++static std::atomic<uint32_t> sSohIosLoadCount{ 0 };
++extern "C" void SohIos_LoadStats(float* ms, unsigned int* count) {
++    *ms = (float)(sSohIosLoadUs.exchange(0) / 1000.0);
++    *count = sSohIosLoadCount.exchange(0);
++}
++#endif
+ #include "ship/resource/File.h"
+ #include "ship/resource/archive/Archive.h"
+ #include <algorithm>
+@@ -138,15 +153,42 @@
+     }
+ 
+     // Get the file from the OTR
++#ifdef __IOS__
++    auto sohIosLoadT0 = std::chrono::steady_clock::now();
++#endif
+     auto file = LoadFileProcess(identifier.Path);
+     if (file == nullptr) {
+         SPDLOG_TRACE("Failed to load resource file at path {}", identifier.Path);
+         mResourceCache[identifier] = ResourceLoadError::NotFound;
++#ifdef __IOS__
++        // SOH_IOS (overlay 0025 rev2): failed lookups (every alt-pack MISS
++        // walks this) were untimed in rev1 — count them into the aggregate.
++        {
++            double sohIosMs =
++                std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - sohIosLoadT0).count();
++            sSohIosLoadUs.fetch_add((uint64_t)(sohIosMs * 1000.0));
++            sSohIosLoadCount.fetch_add(1);
++            if (sohIosMs > 10.0) {
++                SPDLOG_INFO("SOH_LOAD {:.1f}ms MISS {}", sohIosMs, identifier.Path);
++            }
++        }
++#endif
+         return nullptr;
+     }
+ 
+     // Transform the raw data into a resource
+     auto resource = GetResourceLoader()->LoadResource(identifier.Path, file, initData);
++#ifdef __IOS__
++    {
++        double sohIosMs =
++            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - sohIosLoadT0).count();
++        sSohIosLoadUs.fetch_add((uint64_t)(sohIosMs * 1000.0));
++        sSohIosLoadCount.fetch_add(1);
++        if (sohIosMs > 10.0) {
++            SPDLOG_INFO("SOH_LOAD {:.1f}ms {}", sohIosMs, identifier.Path);
++        }
++    }
++#endif
+ 
+     // Another thread could have loaded the resource while we were processing, so we want to check before setting to
+     // the cache.

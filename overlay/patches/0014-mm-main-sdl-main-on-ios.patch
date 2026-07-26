@@ -1,0 +1,20 @@
+Overlay patch 0014: keep the game entry named SDL_main on iOS.
+Upstream renames SDL_main back to plain main() under __GNUC__ (Clang
+included), which bypasses SDL2main's UIKit shim: no UIApplicationMain, no
+UIKit application context, SDL_CreateWindow returns NULL, Gui::Init never
+runs, and boot SIGSEGVs in BenGui::SetupMenu dereferencing the null ImGui
+context (observed on the iOS simulator). With SDL_main kept, SDL2main's
+main() runs UIApplicationMain and calls SDL_main on the main thread after
+launch. Desktop unaffected (__IOS__ only).
+
+--- a/mm/src/code/main.c
++++ b/mm/src/code/main.c
+@@ -49,7 +49,7 @@
+ 
+ void InitOTR(int argc, char* argv[]);
+ void Heaps_Free(void);
+-#ifdef __GNUC__
++#if defined(__GNUC__) && !defined(__IOS__)
+ #define SDL_main main
+ #endif
+ 

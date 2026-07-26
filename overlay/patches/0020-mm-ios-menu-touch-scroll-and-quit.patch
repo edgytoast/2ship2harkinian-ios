@@ -1,0 +1,100 @@
+Overlay patch 0020 (reference 0018 parity): touch scrolling for the 2S2H
+menu (the shell queues finger deltas via overlay 0015's exports; the menu's
+scrollable children — search results, sidebar, both section variants —
+consume them when the finger is horizontally inside; mouse-free so no
+hover/slider side-effects) + the iOS quit fix (menu quit does CVarSave +
+exit(0) after Window->Close(): there is no desktop loop to unwind, Close
+alone froze the Ship of Harkinian port on device). __IOS__-only.
+
+--- a/mm/2s2h/BenGui/Menu.cpp
++++ b/mm/2s2h/BenGui/Menu.cpp
+@@ -6,6 +6,11 @@
+ #include "BenModals.h"
+ #include "Notification.h"
+ #include <variant>
++
++#ifdef __IOS__
++extern "C" float SohIos_TakeMenuScrollFor(float winX, float winW);
++extern "C" void CVarSave();
++#endif
+ #include <spdlog/fmt/fmt.h>
+ #include "variables.h"
+ #include <tuple>
+@@ -187,6 +192,15 @@
+ uint32_t Menu::DrawSearchResults(std::string& menuSearchText) {
+     auto menuThemeIndex = static_cast<UIWidgets::Colors>(CVarGetInteger("gSettings.Menu.Theme", defaultThemeIndex));
+     ImGui::BeginChild("Search Results");
++
++#ifdef __IOS__
++    {
++        float sohIosDy = SohIos_TakeMenuScrollFor(ImGui::GetWindowPos().x, ImGui::GetWindowSize().x);
++        if (sohIosDy != 0.0f) {
++            ImGui::SetScrollY(ImGui::GetScrollY() - sohIosDy);
++        }
++    }
++#endif
+     int searchCount = 0;
+     for (auto& menuLabel : menuOrder) {
+         auto& menuEntry = menuEntries.at(menuLabel);
+@@ -723,6 +737,12 @@
+                     menu->ToggleVisibility();
+                 }
+                 Ship::Context::GetInstance()->GetWindow()->Close();
++#ifdef __IOS__
++                // SOH_IOS (overlay 0020): no desktop main loop to unwind to;
++                // Close() alone left a frozen screen on device. Save and go.
++                CVarSave();
++                exit(0);
++#endif
+             },
+             nullptr);
+     }
+@@ -784,6 +804,15 @@
+     ImGui::SetNextWindowSizeConstraints({ sidebarWidth, 0 }, { sidebarWidth, columnHeight });
+     ImGui::BeginChild((menuEntries.at(headerIndex).label + " Section").c_str(), { sidebarWidth, columnHeight * 3 },
+                       ImGuiChildFlags_AutoResizeY | ImGuiChildFlags_AlwaysAutoResize, ImGuiWindowFlags_NoTitleBar);
++
++#ifdef __IOS__
++    {
++        float sohIosDy = SohIos_TakeMenuScrollFor(ImGui::GetWindowPos().x, ImGui::GetWindowSize().x);
++        if (sohIosDy != 0.0f) {
++            ImGui::SetScrollY(ImGui::GetScrollY() - sohIosDy);
++        }
++    }
++#endif
+     for (auto& sidebarLabel : menuEntries.at(headerIndex).sidebarOrder) {
+         std::string nextIndex = "";
+         UIWidgets::PushStyleButton(menuThemeIndex);
+@@ -828,7 +857,16 @@
+         ImGui::SetNextWindowSizeConstraints({ sectionWidth, 0 }, { sectionWidth, columnHeight });
+         ImGui::BeginChild(sectionMenuId.c_str(), { sectionWidth, windowHeight * 4 }, ImGuiChildFlags_AutoResizeY,
+                           ImGuiWindowFlags_NoTitleBar);
++
++#ifdef __IOS__
++    {
++        float sohIosDy = SohIos_TakeMenuScrollFor(ImGui::GetWindowPos().x, ImGui::GetWindowSize().x);
++        if (sohIosDy != 0.0f) {
++            ImGui::SetScrollY(ImGui::GetScrollY() - sohIosDy);
++        }
+     }
++#endif
++    }
+     if (headerSearch && menuSearchText.length() > 0) {
+         uint32_t searchCount = DrawSearchResults(menuSearchText);
+         if (searchCount == 0) {
+@@ -860,6 +898,15 @@
+                 ImGui::SetNextWindowSizeConstraints({ columnWidth, 0 }, { columnWidth, columnHeight });
+                 ImGui::BeginChild(sectionId.c_str(), { columnWidth, windowHeight * 4 }, ImGuiChildFlags_AutoResizeY,
+                                   ImGuiWindowFlags_NoTitleBar);
++
++#ifdef __IOS__
++    {
++        float sohIosDy = SohIos_TakeMenuScrollFor(ImGui::GetWindowPos().x, ImGui::GetWindowSize().x);
++        if (sohIosDy != 0.0f) {
++            ImGui::SetScrollY(ImGui::GetScrollY() - sohIosDy);
++        }
++    }
++#endif
+             }
+             // for (auto& entryName : sidebar->at(sectionIndex).sidebarOrder) {
+             for (auto& entry : sidebar->at(sectionIndex).columnWidgets.at(i)) {

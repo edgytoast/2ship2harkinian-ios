@@ -1,0 +1,18 @@
+Overlay patch 0013: Rando.h uses nlohmann::json in declarations but never
+includes <nlohmann/json.hpp> — it relied on mm's target_precompile_headers
+injecting it into every CXX TU. The Xcode generator cannot honor the PCH's
+$<COMPILE_LANGUAGE:CXX> gating (it force-includes the C++ PCH into C/ObjC
+sources → "unknown type name 'bool'"), so iOS builds run with
+-DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON and headers must include what they
+use. No effect on desktop builds (include guards). Upstreamable.
+
+--- a/mm/2s2h/Rando/Rando.h
++++ b/mm/2s2h/Rando/Rando.h
+@@ -4,6 +4,7 @@
+ #include "StaticData/StaticData.h"
+ #include "Types.h"
+ #include "variables.h"
++#include <nlohmann/json.hpp>
+ 
+ #define IS_RANDO (gSaveContext.save.shipSaveInfo.saveType == SAVETYPE_RANDO)
+ #define RANDO_SAVE_CHECKS gSaveContext.save.shipSaveInfo.rando.randoSaveChecks

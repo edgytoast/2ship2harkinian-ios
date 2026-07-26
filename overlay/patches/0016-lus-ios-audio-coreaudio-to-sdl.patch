@@ -1,0 +1,24 @@
+Overlay patch 0016 (reference 0014 analog): on iOS a saved config value of
+"coreaudio" (e.g. synced from a macOS install) must map to SDL, not the
+compiled-out CoreAudio player (whose switch default would be the silent
+Null player). In this fork the parse lives in Config.cpp:246 (upstream
+later moved it into Audio.cpp — hence the Ship of Harkinian port patch's different
+shape). Disjoint from 0003's default-backend hunk below it (D6).
+
+--- a/libultraship/src/ship/config/Config.cpp
++++ b/libultraship/src/ship/config/Config.cpp
+@@ -244,7 +244,14 @@
+     }
+ 
+     if (backendName == "coreaudio") {
++#ifdef __IOS__
++        // CoreAudio player is not built on iOS (HALOutput is macOS-only); a
++        // config synced from macOS would otherwise select the silent Null
++        // player via the switch default. Use SDL (real audio) instead.
++        return AudioBackend::SDL;
++#else
+         return AudioBackend::COREAUDIO;
++#endif
+     }
+ 
+     if (backendName == "sdl") {

@@ -1,0 +1,68 @@
+Overlay patch 0027: visionOS platform dispatch (reference 0022 pattern).
+The leetal toolchain sets CMAKE_SYSTEM_NAME=visionOS for the vision
+platforms, but upstream LUS + the 0004 overlay CMake dispatch on
+STREQUAL "iOS" at many sites (first casualty: dependencies/ios.cmake
+never runs -> find_package(libzip) fails). Flip CMAKE_SYSTEM_NAME back
+to "iOS" after each project()/toolchain re-init — compilers, sysroot
+(xrsimulator/xros) and SDKROOT are locked by then, so the flip only
+affects dispatch conditionals. TARGET_OS_VISION (xros SDK) remains the
+source-level discriminator; SOH_VISIONOS the CMake-level one. Three flip
+sites (each project() re-runs platform init in its own scope). 2S2H
+delta vs reference 0022: no -fno-fast-math/swiftc hunk needed — 2S2H's
+top-level add_compile_options are MSVC-only genexes. No-op for iOS
+builds (condition never true).
+
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -6,6 +6,17 @@
+ set(CMAKE_OSX_DEPLOYMENT_TARGET "10.15" CACHE STRING "Minimum OS X deployment version")
+ set(GAME_STR "MM")
+ project(2s2h VERSION 4.0.2 LANGUAGES C CXX)
++
++# SOH_IOS (overlay 0027): visionOS builds (PLATFORM=SIMULATOR_VISIONOS /
++# VISIONOS) dispatch as iOS throughout the tree. Compilers and SDK are
++# already fixed by the toolchain at this point; only the STREQUAL "iOS"
++# conditionals care. TARGET_OS_VISION (from the xros SDK) remains the
++# source-level discriminator.
++if(CMAKE_SYSTEM_NAME STREQUAL "visionOS")
++    set(CMAKE_SYSTEM_NAME "iOS")
++    set(IOS 1)
++    set(SOH_VISIONOS 1)
++endif()
+ include(CMake/2ship-cvars.cmake)
+ include(CMake/lus-cvars.cmake)
+ set(SPDLOG_LEVEL_TRACE 0)
+--- a/libultraship/CMakeLists.txt
++++ b/libultraship/CMakeLists.txt
+@@ -10,6 +10,15 @@
+ 
+ project(libultraship LANGUAGES C CXX)
+ 
++# SOH_IOS (overlay 0027): this project() re-ran the toolchain, resetting
++# CMAKE_SYSTEM_NAME to visionOS — re-flip so the tree keeps dispatching
++# as iOS (see the top-level CMakeLists hunk).
++if(CMAKE_SYSTEM_NAME STREQUAL "visionOS")
++    set(CMAKE_SYSTEM_NAME "iOS")
++    set(IOS 1)
++    set(SOH_VISIONOS 1)
++endif()
++
+ if (CMAKE_SYSTEM_NAME STREQUAL "Darwin" OR CMAKE_SYSTEM_NAME STREQUAL "iOS")
+     enable_language(OBJCXX)
+     set(CMAKE_OBJC_FLAGS "${CMAKE_OBJC_FLAGS} -fobjc-arc")
+@@ -57,6 +66,15 @@
+ # === Platform Specific Configuration ===
+ if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+     include(cmake/ios-toolchain-populate.cmake)
++    # SOH_IOS (overlay 0027): the toolchain include above re-ran leetal's
++    # platform init IN THIS SCOPE, resetting CMAKE_SYSTEM_NAME to visionOS
++    # again — re-flip a third time so src/ (compile definitions, __IOS__)
++    # dispatches as iOS.
++    if(CMAKE_SYSTEM_NAME STREQUAL "visionOS")
++        set(CMAKE_SYSTEM_NAME "iOS")
++        set(IOS 1)
++        set(SOH_VISIONOS 1)
++    endif()
+ endif()
+ 
+ # =========== Sources =============

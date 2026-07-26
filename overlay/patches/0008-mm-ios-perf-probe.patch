@@ -1,0 +1,147 @@
+Overlay patch 0008 (rev9): cadence probe with wall/eng/gpu split,
+aud_min/aud_max (0024's atomics; 0 = underrun, the fuzzy-audio instrument;
+-1 = audio thread not yet running), load_ms/loads (0025 rev2 aggregate of
+synchronous resource-load time), and rev7's addition up_ms/ups (0021 rev3
+aggregate of UploadTexture CPU time — the round-3 stutter instrument and
+the Vision Pro 4K-ladder metric). Coupled to 0021/0024/0025 by design; the
+series applies atomically. __IOS__-only.
+
+--- a/mm/2s2h/BenPort.cpp
++++ b/mm/2s2h/BenPort.cpp
+@@ -1177,7 +1177,111 @@
+         }
+     }
+ #endif
++}
++
++#ifdef __IOS__
++// SOH_IOS_PERF (overlay 0008 rev5): frame/tick cadence probe. wall_ms is
++// the interval between consecutive presents; eng_ms is the time inside
++// DrawAndRunGraphicsCommands (both include in-present blocking); gpu_ms is
++// the TRUE GPU duration of the screen pass (overlay 0021's completed
++// handler); aud_min is the window's minimum backend-buffered sample count
++// seen by the audio thread (overlay 0024) — 0 means an underrun (the
++// fuzzy-audio instrument).
++#include <algorithm>
++#include <chrono>
++// Thermal state provider lives in the app shell (SohIosShell.m).
++extern "C" int SohIos_ThermalState(void);
++// True GPU frame time, written by gfx_metal's completed handler (0021).
++extern "C" volatile float gSohIosGpuMs;
++// Min/max buffered audio samples this window, tracked by the audio loop (0024).
++extern std::atomic<int32_t> sSohIosAudMinBuffered;
++extern std::atomic<int32_t> sSohIosAudMaxBuffered;
++// Aggregate synchronous resource-load time/count this window (0025 rev2).
++extern "C" void SohIos_LoadStats(float* ms, unsigned int* count);
++// Aggregate UploadTexture CPU time/count this window (0021 rev3).
++extern "C" void SohIos_UploadStats(float* ms, unsigned int* count);
++// Per-window PSO-compile time/count (0021 rev5) — the stutter-round-4 tight
++// instrument: high pso_n in a stall window = synchronous pipeline compile.
++extern "C" void SohIos_PsoWindowStats(float* ms, unsigned int* count);
++// Per-window shader-library (MSL source) compile time/count (0021 rev6) —
++// the untimed half of shader creation; suspected bulk of cold transition stalls.
++extern "C" void SohIos_LibWindowStats(float* ms, unsigned int* count);
++namespace SohIosPerf {
++struct Probe {
++    std::vector<double> frameMs;
++    std::vector<double> engMs;
++    std::vector<double> gpuMs;
++    uint64_t ticks = 0;
++    uint32_t hudFrames = 0;
++    float hudFps = 0.0f;
++    std::chrono::steady_clock::time_point hudWindowStart = std::chrono::steady_clock::now();
++    std::chrono::steady_clock::time_point lastFrame{};
++    std::chrono::steady_clock::time_point lastReport = std::chrono::steady_clock::now();
++    void OnFrame(double engineMs) {
++        engMs.push_back(engineMs);
++        gpuMs.push_back((double)gSohIosGpuMs);
++        auto now = std::chrono::steady_clock::now();
++        hudFrames++;
++        double hudEl = std::chrono::duration<double>(now - hudWindowStart).count();
++        if (hudEl >= 1.0) {
++            hudFps = (float)(hudFrames / hudEl);
++            hudFrames = 0;
++            hudWindowStart = now;
++        }
++        if (lastFrame.time_since_epoch().count() != 0) {
++            frameMs.push_back(std::chrono::duration<double, std::milli>(now - lastFrame).count());
++        }
++        lastFrame = now;
++    }
++    void OnTick() {
++        ticks++;
++        auto now = std::chrono::steady_clock::now();
++        double el = std::chrono::duration<double>(now - lastReport).count();
++        if (el < 10.0 || frameMs.size() < 8 || engMs.size() < 8) {
++            return;
++        }
++        std::sort(frameMs.begin(), frameMs.end());
++        std::sort(engMs.begin(), engMs.end());
++        std::sort(gpuMs.begin(), gpuMs.end());
++        auto pct = [](std::vector<double>& v, double p) { return v[(size_t)(p * (v.size() - 1))]; };
++        int32_t audMin = sSohIosAudMinBuffered.exchange(INT32_MAX);
++        int32_t audMax = sSohIosAudMaxBuffered.exchange(-1);
++        float loadMs = 0.0f;
++        unsigned int loadCount = 0;
++        SohIos_LoadStats(&loadMs, &loadCount);
++        float upMs = 0.0f;
++        unsigned int upCount = 0;
++        SohIos_UploadStats(&upMs, &upCount);
++        float psoMs = 0.0f;
++        unsigned int psoCount = 0;
++        SohIos_PsoWindowStats(&psoMs, &psoCount);
++        float libMs = 0.0f;
++        unsigned int libCount = 0;
++        SohIos_LibWindowStats(&libMs, &libCount);
++        SPDLOG_INFO("SOH_PERF wall_ms p50={:.2f} p95={:.2f} p99={:.2f} max={:.2f} "
++                    "eng_ms p50={:.2f} p95={:.2f} gpu_ms p50={:.2f} p95={:.2f} aud_min={} aud_max={} load_ms={:.1f} loads={} up_ms={:.1f} ups={} pso_ms={:.1f} pso_n={} lib_ms={:.1f} lib_n={} n={} fps={:.1f} "
++                    "sim_tps={:.2f} thermal={}",
++                    pct(frameMs, 0.5), pct(frameMs, 0.95), pct(frameMs, 0.99), frameMs.back(),
++                    pct(engMs, 0.5), pct(engMs, 0.95), pct(gpuMs, 0.5), pct(gpuMs, 0.95),
++                    audMin == INT32_MAX ? -1 : audMin, audMax, loadMs, loadCount, upMs, upCount, psoMs, psoCount, libMs, libCount, frameMs.size(),
++                    frameMs.size() / el,
++                    ticks / el,
++                    SohIos_ThermalState());
++        frameMs.clear();
++        engMs.clear();
++        gpuMs.clear();
++        ticks = 0;
++        lastReport = now;
++    }
++};
++static Probe gPerfProbe;
++} // namespace SohIosPerf
++
++// Rolling 1-second fps for the shell's performance HUD.
++extern "C" void SohIos_HudStats(float* fps) {
++    *fps = SohIosPerf::gPerfProbe.hudFps;
+ }
++#endif
+ 
+ void RunCommands(Gfx* Commands, const std::vector<std::unordered_map<Mtx*, MtxF>>& mtx_replacements) {
+     auto wnd = std::dynamic_pointer_cast<Fast::Fast3dWindow>(OTRGlobals::Instance->context->GetWindow());
+@@ -1196,7 +1300,14 @@
+         static_cast<UIWidgets::Colors>(CVarGetInteger("gSettings.Menu.Theme", UIWidgets::Colors::LightBlue));
+     ImGui::PushStyleColor(ImGuiCol_TitleBgActive, UIWidgets::ColorValues.at(themeColor));
+     for (const auto& m : mtx_replacements) {
++#ifdef __IOS__
++        auto sohIosEngT0 = std::chrono::steady_clock::now();
++#endif
+         wnd->DrawAndRunGraphicsCommands(Commands, m);
++#ifdef __IOS__
++        SohIosPerf::gPerfProbe.OnFrame(
++            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - sohIosEngT0).count());
++#endif
+         intp->mInterpolationIndex++;
+     }
+     ImGui::PopStyleColor();
+@@ -1252,6 +1363,9 @@
+     }
+ 
+     RunCommands(commands, mtx_replacements);
++#ifdef __IOS__
++    SohIosPerf::gPerfProbe.OnTick();
++#endif
+ 
+     last_fps = fps;
+     last_update_rate = R_UPDATE_RATE;
