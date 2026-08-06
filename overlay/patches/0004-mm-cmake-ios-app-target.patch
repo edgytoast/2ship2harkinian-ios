@@ -254,7 +254,7 @@ $<TARGET_FILE_DIR> (mm/CMakeLists.txt:501-510), which lands inside the .app.
 +	<key>CFBundleIconName</key>
 +	<string>AppIcon</string>
 +	<key>CFBundleShortVersionString</key>
-+	<string>1.0.0</string>
++	<string>1.0.1</string>
 +	<key>CFBundleVersion</key>
 +	<string>1</string>
 +	<key>LSRequiresIPhoneOS</key>

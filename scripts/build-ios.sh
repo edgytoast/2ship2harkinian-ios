@@ -17,6 +17,7 @@ if [[ ! -f "$SHIP_O2R" ]]; then
 fi
 
 cmake --no-warn-unused-cli -S "$ROOT/vendor/2ship2harkinian" -B "$BUILD" -GXcode \
+    -DCMAKE_XCODE_ATTRIBUTE_STRIP_INSTALLED_PRODUCT=NO \
     -DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_DEPLOYMENT_TARGET=15.0 \
     -DCMAKE_BUILD_TYPE:STRING=Release \
     -DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON \

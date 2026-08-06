@@ -5,6 +5,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BUILD="$ROOT/spikes/2s2h-vision-sim-build"
 PREFIX="$ROOT/work/vision-sim-deps/prefix"
 SHIP_O2R="$ROOT/oracle/build-cmake/mm/2ship.o2r"
+CONSOLE="${SOH_REMOTE_CONSOLE:-ON}"
 
 [[ -d "$ROOT/vendor/2ship2harkinian/.git" ]] || "$ROOT/scripts/bootstrap.sh"
 "$ROOT/scripts/apply-overlay.sh"
@@ -12,6 +13,8 @@ SHIP_O2R="$ROOT/oracle/build-cmake/mm/2ship.o2r"
 [[ -f "$SHIP_O2R" ]] || "$ROOT/scripts/build-oracle.sh"
 
 cmake --no-warn-unused-cli -S "$ROOT/vendor/2ship2harkinian" -B "$BUILD" -GXcode \
+    -DCMAKE_XCODE_ATTRIBUTE_STRIP_INSTALLED_PRODUCT=NO \
+    "-DSOH_REMOTE_CONSOLE=$CONSOLE" \
     -DCMAKE_SYSTEM_NAME=visionOS -DPLATFORM=SIMULATOR_VISIONOS \
     -DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON \
     -DCMAKE_OSX_SYSROOT=xrsimulator \
