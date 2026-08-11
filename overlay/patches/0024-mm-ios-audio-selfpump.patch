@@ -18,7 +18,7 @@ docs/PORTING-DELTAS.md: check your OTRAudio_Thread for the plain-wait loop.
 
 --- a/mm/2s2h/BenPort.cpp
 +++ b/mm/2s2h/BenPort.cpp
-@@ -822,11 +822,118 @@
+@@ -799,11 +799,118 @@
      bool running;
      bool processing;
  } audio;
@@ -137,7 +137,7 @@ docs/PORTING-DELTAS.md: check your OTRAudio_Thread for the plain-wait loop.
              while (!audio.processing && audio.running) {
                  audio.cv_to_thread.wait(Lock);
              }
-@@ -836,15 +943,6 @@
+@@ -813,15 +920,6 @@
              }
          }
          std::unique_lock<std::mutex> Lock(audio.mutex);
@@ -153,7 +153,7 @@ docs/PORTING-DELTAS.md: check your OTRAudio_Thread for the plain-wait loop.
          int samples_left = AudioPlayer_Buffered();
          u32 num_audio_samples = samples_left < AudioPlayer_GetDesiredBuffered() ? SAMPLES_HIGH : SAMPLES_LOW;
  
-@@ -861,6 +959,7 @@
+@@ -838,6 +936,7 @@
          audio.processing = false;
          audio.cv_from_thread.notify_one();
      }

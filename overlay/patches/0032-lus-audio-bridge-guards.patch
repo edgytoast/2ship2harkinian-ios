@@ -4,9 +4,14 @@ AudioPlayerBuffered+32 on OTRAudio_Thread — the bridge null-checks the
 PLAYER but not the chain; Context()->GetAudio() is null during
 init/teardown windows and ->GetAudioPlayer() on it faults. Guard the
 chain in every bridge function the audio thread can hit (all six here).
-Regenerated: this fork uses GetInstance() (shared_ptr), not the
-reference's GetRawInstance() — the "applies clean != compiles" fork delta
-from the original audit, now load-bearing.
+
+Still required at upstream 5.0.0, which is worth stating plainly because
+the file now LOOKS guarded: 5.0.0 added `audio == nullptr` and
+`!audio->IsInitialized()` early-outs, but both test the PLAYER, and the
+faulting dereference is `GetAudio()->GetAudioPlayer()` — evaluated before
+either check can run. The chain guard is what keeps a null GetAudio()
+from faulting. 5.0.0 also closed the old fork delta by moving this file
+to GetRawInstance(), so the accessor now matches the Ship of Harkinian port.
 
 --- a/libultraship/src/libultraship/bridge/audiobridge.cpp
 +++ b/libultraship/src/libultraship/bridge/audiobridge.cpp
@@ -14,8 +19,8 @@ from the original audit, now load-bearing.
  extern "C" {
  
  int32_t AudioPlayerBuffered() {
--    auto audio = Ship::Context::GetInstance()->GetAudio()->GetAudioPlayer();
-+    auto sohIosCtx = Ship::Context::GetInstance();
+-    auto audio = Ship::Context::GetRawInstance()->GetAudio()->GetAudioPlayer();
++    auto sohIosCtx = Ship::Context::GetRawInstance();
 +    if (sohIosCtx == nullptr || sohIosCtx->GetAudio() == nullptr) {
 +        return 0;
 +    }
@@ -27,8 +32,8 @@ from the original audit, now load-bearing.
  }
  
  int32_t AudioPlayerGetDesiredBuffered() {
--    auto audio = Ship::Context::GetInstance()->GetAudio()->GetAudioPlayer();
-+    auto sohIosCtx = Ship::Context::GetInstance();
+-    auto audio = Ship::Context::GetRawInstance()->GetAudio()->GetAudioPlayer();
++    auto sohIosCtx = Ship::Context::GetRawInstance();
 +    if (sohIosCtx == nullptr || sohIosCtx->GetAudio() == nullptr) {
 +        return 0;
 +    }
@@ -40,8 +45,8 @@ from the original audit, now load-bearing.
  }
  
  AudioChannelsSetting GetAudioChannels() {
--    auto audio = Ship::Context::GetInstance()->GetAudio()->GetAudioPlayer();
-+    auto sohIosCtx = Ship::Context::GetInstance();
+-    auto audio = Ship::Context::GetRawInstance()->GetAudio()->GetAudioPlayer();
++    auto sohIosCtx = Ship::Context::GetRawInstance();
 +    if (sohIosCtx == nullptr || sohIosCtx->GetAudio() == nullptr) {
 +        return audioStereo;
 +    }
@@ -53,8 +58,8 @@ from the original audit, now load-bearing.
  }
  
  int32_t GetNumAudioChannels() {
--    auto audio = Ship::Context::GetInstance()->GetAudio()->GetAudioPlayer();
-+    auto sohIosCtx = Ship::Context::GetInstance();
+-    auto audio = Ship::Context::GetRawInstance()->GetAudio()->GetAudioPlayer();
++    auto sohIosCtx = Ship::Context::GetRawInstance();
 +    if (sohIosCtx == nullptr || sohIosCtx->GetAudio() == nullptr) {
 +        return 2;
 +    }
@@ -66,8 +71,8 @@ from the original audit, now load-bearing.
  }
  
  void AudioPlayerPlayFrame(const uint8_t* buf, size_t len) {
--    auto audio = Ship::Context::GetInstance()->GetAudio()->GetAudioPlayer();
-+    auto sohIosCtx = Ship::Context::GetInstance();
+-    auto audio = Ship::Context::GetRawInstance()->GetAudio()->GetAudioPlayer();
++    auto sohIosCtx = Ship::Context::GetRawInstance();
 +    if (sohIosCtx == nullptr || sohIosCtx->GetAudio() == nullptr) {
 +        return;
 +    }
@@ -79,8 +84,8 @@ from the original audit, now load-bearing.
  }
  
  void SetAudioChannels(AudioChannelsSetting channels) {
--    auto audio = Ship::Context::GetInstance()->GetAudio();
-+    auto sohIosCtx = Ship::Context::GetInstance();
+-    auto audio = Ship::Context::GetRawInstance()->GetAudio();
++    auto sohIosCtx = Ship::Context::GetRawInstance();
 +    if (sohIosCtx == nullptr) {
 +        return;
 +    }

@@ -19,7 +19,7 @@ mm's sequence.h / gSaveContext.fileNum. __IOS__-only.
 +// with (never runs beside) the SDL game loop.
 +#include "sequence.h"
 +extern "C" int SohIos_IsMenuOpen(void) {
-+    auto ctx = Ship::Context::GetInstance();
++    auto ctx = Ship::Context::GetRawInstance();
 +    if (ctx == nullptr) {
 +        return 0;
 +    }

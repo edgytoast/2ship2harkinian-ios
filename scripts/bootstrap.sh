@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-PIN="a7e3e7c29be41cf67d89bdcb2f501d36d6106544" # develop, 4.0.2 lineage, 2026-07-09
+PIN="d35196ad7e93a77184e0745abc9865f04f9a9378" # tag 5.0.0 "Battler Alfa", 2026-08-11
 REPO="https://github.com/HarbourMasters/2ship2harkinian.git"
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

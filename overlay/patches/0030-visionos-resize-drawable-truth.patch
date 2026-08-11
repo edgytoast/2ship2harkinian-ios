@@ -10,8 +10,8 @@ the 0016-pattern background parking block above the anchor.
 
 --- a/libultraship/src/fast/backends/gfx_metal.cpp
 +++ b/libultraship/src/fast/backends/gfx_metal.cpp
-@@ -833,6 +833,16 @@
-         tex.texture->release();
+@@ -1048,6 +1048,16 @@
+     NS::AutoreleasePool* autorelease_pool = NS::AutoreleasePool::alloc()->init();
  
      tex.texture = mCurrentDrawable->texture();
 +

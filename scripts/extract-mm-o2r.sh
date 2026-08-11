@@ -5,9 +5,12 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 ROM="${1:-$ROOT/work/gamedata/mm-usa.z64}"
 OUTDIR="${2:-$ROOT/oracle/shiphome}"
 ZAPD="$ROOT/oracle/build-cmake/ZAPD/ZAPD.out"
+VENDOR="$ROOT/vendor/2ship2harkinian"
 ASSETS="$ROOT/oracle/build-cmake/mm/assets"
 VERSION="N64_US"
-PORTVER="4.0.2" # CMAKE_PROJECT_VERSION — must match gBuildVersionMajor of the
+PORTVER="$(sed -n 's/^project(2s2h VERSION \([0-9.]*\) .*/\1/p' "$VENDOR/CMakeLists.txt" | head -1)"
+[[ -n "$PORTVER" ]] || { echo "FATAL: could not read project version from $VENDOR/CMakeLists.txt" >&2; exit 1; }
+echo "extractor portVer: $PORTVER (from vendored CMakeLists)"
 
 [[ -x "$ZAPD" ]] || { echo "FATAL: ZAPD not built at $ZAPD" >&2; exit 1; }
 [[ -f "$ROM" ]] || { echo "FATAL: ROM not found at $ROM" >&2; exit 1; }

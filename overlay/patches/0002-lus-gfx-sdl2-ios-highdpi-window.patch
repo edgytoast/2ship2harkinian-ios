@@ -6,8 +6,8 @@ SDL_GetRendererOutputSize. Regenerated for the 7f2baa10 LUS fork (reference
 
 --- a/libultraship/src/fast/backends/gfx_sdl2.cpp
 +++ b/libultraship/src/fast/backends/gfx_sdl2.cpp
-@@ -357,7 +357,7 @@
-     int len = sprintf(title, "%s (%s)", gameName, gfxApiName);
+@@ -374,7 +374,7 @@
+     int len = snprintf(title, sizeof(title), "%s (%s)", gameName, gfxApiName);
  
  #ifdef __IOS__
 -    Uint32 flags = SDL_WINDOW_BORDERLESS | SDL_WINDOW_SHOWN;

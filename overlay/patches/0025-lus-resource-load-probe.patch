@@ -31,15 +31,15 @@ failures). Cache hits still pay nothing. __IOS__-only.
  #include "ship/resource/File.h"
  #include "ship/resource/archive/Archive.h"
  #include <algorithm>
-@@ -138,15 +153,42 @@
-     }
- 
-     // Get the file from the OTR
+@@ -152,15 +167,42 @@
+     // Get the file from the OTR. It may be null when the resource exists only as a `.meta`
+     // alias (no real file at this path); fall through so the loader can resolve the alias,
+     // but only when a `.meta` for this path actually exists.
 +#ifdef __IOS__
 +    auto sohIosLoadT0 = std::chrono::steady_clock::now();
 +#endif
      auto file = LoadFileProcess(identifier.Path);
-     if (file == nullptr) {
+     if (file == nullptr && !mArchiveManager->HasFile(identifier.Path + ".meta")) {
          SPDLOG_TRACE("Failed to load resource file at path {}", identifier.Path);
          mResourceCache[identifier] = ResourceLoadError::NotFound;
 +#ifdef __IOS__

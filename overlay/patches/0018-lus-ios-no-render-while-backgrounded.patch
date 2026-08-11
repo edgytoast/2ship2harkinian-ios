@@ -1,22 +1,22 @@
-Overlay patch 0018 (rev2, reference 0016 parity): never render while
-backgrounded — park the game thread off nextDrawable, ticking the main run
-loop via the shell's SohIos_ParkTick (a sleeping park self-deadlocks: the
-game loop IS the main thread on iOS, so the lifecycle event that clears the
-flag can never deliver — reference device black-screen root cause). Null-
-drawable retry + frame skip kept from rev1. Disjoint from 0010 and 0021
-hunks (D6). __IOS__-only.
+Overlay patch 0018 (reference 0016 analog): never render while backgrounded.
+Device symptom on the Ship of Harkinian port: game unplayably slow after minimize+reopen —
+Metal nextDrawable must not run while backgrounded (stall/timeout, watchdog
+risk, degraded drawable pool). Gate acquisition on the shell's
+SohIos_IsBackgrounded() flag; retry a briefly-null drawable and skip the
+frame instead of dereferencing null. Regenerated for this fork's
+SetupScreenFramebuffer (same body as reference's; context offsets differ).
+Disjoint from 0010's RenderDrawData hunk (D6). __IOS__-only.
 
 --- a/libultraship/src/fast/backends/gfx_metal.cpp
 +++ b/libultraship/src/fast/backends/gfx_metal.cpp
-@@ -619,9 +619,40 @@
+@@ -700,9 +700,37 @@
      return (int)index;
  }
  
 +#ifdef __IOS__
-+// SOH_IOS (overlay 0018): shell-provided background flag + park tick
-+// (linkage specs must live at file scope, not inside the function).
++// SOH_IOS (overlay 0018): shell-provided background flag (linkage specs
++// must live at file scope, not inside the function).
 +extern "C" int SohIos_IsBackgrounded(void);
-+extern "C" void SohIos_ParkTick(void);
 +#endif
 +
  void GfxRenderingAPIMetal::SetupScreenFramebuffer(uint32_t width, uint32_t height) {
@@ -26,11 +26,9 @@ hunks (D6). __IOS__-only.
 +    // background stalls/times out (post-resume slowdown, watchdog risk).
 +    // The process suspends moments later and resumes here.
 +    {
-+        // ParkTick services the main run loop (the game loop IS the main
-+        // thread on iOS) so the lifecycle events that clear the flag can
-+        // deliver — a sleeping park here deadlocks into a black screen.
++        const struct timespec sohIosNap = { 0, 50 * 1000 * 1000 };
 +        while (SohIos_IsBackgrounded()) {
-+            SohIos_ParkTick();
++            nanosleep(&sohIosNap, nullptr);
 +        }
 +        const struct timespec sohIosRetryNap = { 0, 10 * 1000 * 1000 };
 +        for (int i = 0; i < 100 && mCurrentDrawable == nullptr; i++) {
@@ -47,5 +45,5 @@ hunks (D6). __IOS__-only.
      mCurrentDrawable = mLayer->nextDrawable();
 +#endif
  
-     bool msaa_enabled = Ship::Context::GetInstance()->GetConsoleVariables()->GetInteger("gMSAAValue", 1) > 1;
+     bool msaa_enabled = Ship::Context::GetRawInstance()->GetConsoleVariables()->GetInteger("gMSAAValue", 1) > 1;
  

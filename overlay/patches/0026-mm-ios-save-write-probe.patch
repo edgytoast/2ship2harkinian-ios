@@ -8,7 +8,7 @@ __IOS__-only.
 
 --- a/mm/2s2h/SaveManager/SaveManager.cpp
 +++ b/mm/2s2h/SaveManager/SaveManager.cpp
-@@ -106,6 +106,13 @@
+@@ -107,6 +107,13 @@
  }
  
  void SaveManager_WriteSaveFile(const std::filesystem::path& fileName, nlohmann::json j) {
@@ -22,7 +22,7 @@ __IOS__-only.
      const std::filesystem::path filePath = savesFolderPath / fileName;
  
      if (!std::filesystem::exists(savesFolderPath)) {
-@@ -117,6 +124,11 @@
+@@ -118,6 +125,11 @@
          o << std::setw(4) << j << std::endl;
          o.close();
      } catch (...) { SPDLOG_ERROR("Failed to write save file"); }

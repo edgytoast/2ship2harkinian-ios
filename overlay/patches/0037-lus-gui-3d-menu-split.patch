@@ -13,9 +13,9 @@ finish method closes the ImGui frame.
 
 --- a/libultraship/include/ship/window/gui/Gui.h
 +++ b/libultraship/include/ship/window/gui/Gui.h
-@@ -99,6 +99,12 @@
-     void SetMenu(std::shared_ptr<GuiWindow> menu);
-     std::shared_ptr<GuiWindow> GetMenu();
+@@ -138,6 +138,12 @@
+      * @brief Returns true if the menu bar or the full-screen menu window is currently visible.
+      */
      bool GetMenuOrMenubarVisible();
 +    // SOH_IOS (overlay 0034): stereo 3D menu frame — build once (no
 +    // backend NewFrame: the caller primed ImGui_ImplMetal with an eye
@@ -23,12 +23,12 @@ finish method closes the ImGui frame.
 +    void Soh3DBuildMenuFrame();
 +    void* Soh3DGetDrawData();
 +    void Soh3DFinishMenuFrame();
-     bool IsMouseOverAnyGuiItem();
-     bool IsMouseOverActivePopup();
  
+     /** @brief Returns true if the mouse cursor is currently over any ImGui item. */
+     bool IsMouseOverAnyGuiItem();
 --- a/libultraship/src/ship/window/gui/Gui.cpp
 +++ b/libultraship/src/ship/window/gui/Gui.cpp
-@@ -489,6 +489,10 @@
+@@ -184,6 +184,10 @@
      }
  }
  
@@ -37,9 +37,9 @@ finish method closes the ImGui frame.
 +extern "C" volatile int gSoh3DMode;
 +
  void Gui::DrawMenu() {
-     const std::shared_ptr<Window> wnd = Context::GetInstance()->GetWindow();
-     const std::shared_ptr<Config> conf = Context::GetInstance()->GetConfig();
-@@ -527,6 +531,17 @@
+     // Per frame: popups (boot prompts, the file browser) have no open/close event to hook.
+     UpdateGamepadNavigation();
+@@ -225,6 +229,17 @@
      }
  
      ImGui::DockSpace(dockId, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_None | ImGuiDockNodeFlags_NoDockingInCentralNode);
@@ -57,10 +57,12 @@ finish method closes the ImGui frame.
  
      if (ImGui::IsKeyPressed(TOGGLE_BTN, false) || ImGui::IsKeyPressed(ImGuiKey_Escape, false) ||
          (ImGui::IsKeyPressed(TOGGLE_PAD_BTN, false) &&
-@@ -622,8 +637,75 @@
- 
- void Gui::SetCursorVisibilityTime(int32_t seconds) {
-     mCursorVisibleSeconds = seconds;
+@@ -280,10 +295,77 @@
+             } else {
+                 window->Flags &= ~(flags);
+             }
++        }
++    }
 +}
 +
 +// SOH_IOS (overlay 0034): the 2D perf HUD is a UIKit label on the parked
@@ -116,8 +118,8 @@ finish method closes the ImGui frame.
 +            sohFg->AddText(sohFont, sohHudSize, ImVec2(sohPos.x + 2, sohPos.y + 2),
 +                           IM_COL32(0, 0, 0, 200), sohHudBuf);
 +            sohFg->AddText(sohFont, sohHudSize, sohPos, sohCol, sohHudBuf);
-+        }
-+    }
+         }
+     }
 +    ImGui::Render();
  }
  
@@ -131,5 +133,5 @@ finish method closes the ImGui frame.
 +}
 +
  void Gui::StartFrame() {
-     CursorTimeoutTick();
      HandleMouseCapture();
+     ImGuiBackendNewFrame();

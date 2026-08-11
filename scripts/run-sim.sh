@@ -6,7 +6,11 @@ APP="$ROOT/spikes/2s2h-sim-build/mm/Release-iphonesimulator/2ship.app"
 BUNDLE_ID="com.harbourmasters.2s2h"
 MM="$ROOT/oracle/shiphome/mm.o2r"
 SHOT="${1:-sim-boot}"
-UDID="5B40BEAC-0576-400A-9B34-5C347D5BEAE7"
+SIM_NAME="${SIM_NAME:-iPhone Air}"
+UDID="${SIM_UDID:-$(xcrun simctl list devices available \
+    | sed -n "s/^ *${SIM_NAME} (\([0-9A-F-]\{36\}\)) .*/\1/p" | head -1)}"
+[[ -n "$UDID" ]] || { echo "FATAL: no available simulator named '$SIM_NAME' (do not create one — ask)" >&2; exit 1; }
+echo "sim lane: $SIM_NAME ($UDID)"
 
 [[ -d "$APP" ]] || { echo "FATAL: no sim app at $APP — run scripts/build-sim.sh" >&2; exit 1; }
 [[ -f "$MM" ]] || { echo "FATAL: no mm.o2r — run scripts/extract-mm-o2r.sh" >&2; exit 1; }

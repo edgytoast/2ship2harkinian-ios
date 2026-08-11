@@ -39,7 +39,7 @@ alone froze the Ship of Harkinian port on device). __IOS__-only.
 @@ -723,6 +737,12 @@
                      menu->ToggleVisibility();
                  }
-                 Ship::Context::GetInstance()->GetWindow()->Close();
+                 Ship::Context::GetRawInstance()->GetWindow()->Close();
 +#ifdef __IOS__
 +                // SOH_IOS (overlay 0020): no desktop main loop to unwind to;
 +                // Close() alone left a frozen screen on device. Save and go.

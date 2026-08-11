@@ -8,7 +8,7 @@ well-defined (level 0).
 
 --- a/libultraship/src/fast/backends/gfx_metal.cpp
 +++ b/libultraship/src/fast/backends/gfx_metal.cpp
-@@ -634,6 +634,15 @@
+@@ -661,6 +661,15 @@
                                            : MTL::SamplerMinMagFilterNearest;
      sampler_descriptor->setMinFilter(filter);
      sampler_descriptor->setMagFilter(filter);

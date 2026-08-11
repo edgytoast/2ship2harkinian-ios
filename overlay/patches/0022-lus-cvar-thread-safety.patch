@@ -8,8 +8,10 @@ funnel here), the five Set*, ClearVariable, CopyVariable, Save (iteration),
 Load (clear; LoadFromPath/LoadLegacy run only under Load's lock).
 Uncontended lock cost is tens of ns — noise. Residual (documented, not
 fixed): GetString's char* after a concurrent SetString free — no
-audio-thread call site reads strings today. Fork deltas vs reference 0030:
-no TransparentStringHash, Context::GetInstance().
+audio-thread call site reads strings today. Upstream 5.0.0's LUS closed
+both former fork deltas vs reference 0030 — the transparent string
+hash/equal comparators on mVariables, and Context::GetRawInstance() — so
+the anchors now match the Ship of Harkinian port. Neither affects the lock itself.
 
 --- a/libultraship/include/ship/config/ConsoleVariable.h
 +++ b/libultraship/include/ship/config/ConsoleVariable.h
@@ -20,11 +22,11 @@ no TransparentStringHash, Context::GetInstance().
 +#include <mutex>
  #include <unordered_map>
  #include <string>
- 
-@@ -65,5 +66,10 @@
- 
-   private:
-     std::unordered_map<std::string, std::shared_ptr<CVar>> mVariables;
+ #include <string_view>
+@@ -209,5 +210,10 @@
+         }
+     };
+     std::unordered_map<std::string, std::shared_ptr<CVar>, TransparentStringHash, TransparentStringEqual> mVariables;
 +    // SOH_IOS (overlay 0022): guards mVariables — the audio thread reads
 +    // CVars every synth update while the main thread writes them (menu,
 +    // death sequence); an unguarded rehash SEGVs the concurrent find().
@@ -88,7 +90,7 @@ no TransparentStringHash, Context::GetInstance().
  
  void ConsoleVariable::ClearVariable(const char* name) {
 +    std::lock_guard<std::recursive_mutex> sohIosLock(mVariablesMutex);
-     std::shared_ptr<Config> conf = Context::GetInstance()->GetConfig();
+     std::shared_ptr<Config> conf = Context::GetRawInstance()->GetConfig();
      auto var = Get(name);
      if (var != nullptr) {
 @@ -208,6 +216,7 @@
@@ -104,7 +106,7 @@ no TransparentStringHash, Context::GetInstance().
  
  void ConsoleVariable::Save() {
 +    std::lock_guard<std::recursive_mutex> sohIosLock(mVariablesMutex);
-     std::shared_ptr<Config> conf = Context::GetInstance()->GetConfig();
+     std::shared_ptr<Config> conf = Context::GetRawInstance()->GetConfig();
  
      for (const auto& variable : mVariables) {
 @@ -277,6 +287,7 @@
@@ -112,6 +114,6 @@ no TransparentStringHash, Context::GetInstance().
  
  void ConsoleVariable::Load() {
 +    std::lock_guard<std::recursive_mutex> sohIosLock(mVariablesMutex);
-     std::shared_ptr<Config> conf = Context::GetInstance()->GetConfig();
+     std::shared_ptr<Config> conf = Context::GetRawInstance()->GetConfig();
      conf->Reload();
      if (!mVariables.empty()) {

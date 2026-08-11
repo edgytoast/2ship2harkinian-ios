@@ -1,11 +1,13 @@
 Overlay patch 0003: Audio.cpp references CoreAudioAudioPlayer under
-__APPLE__, but src/ship/CMakeLists.txt:16-17 only compiles it on Darwin —
+__APPLE__, but src/ship/CMakeLists.txt only compiles it on Darwin —
 undefined symbol at app link on iOS, and COREAUDIO would be the default
-backend with no implementation. Gate the three Audio.cpp blocks AND the
-default-backend selection (Config.cpp:264-268 in this fork — upstream later
-moved it into Audio.cpp, hence the Ship of Harkinian port patch's shape differs) off iOS.
-Default/available backend on iOS becomes SDL (works: SDL-iOS configures the
-AVAudioSession internally).
+backend with no implementation. Gate the three CoreAudio blocks AND the
+default-backend selection off iOS. Default/available backend on iOS becomes
+SDL (works: SDL-iOS configures the AVAudioSession internally).
+
+Upstream 5.0.0 moved GetSavedAudioBackend() from Config.cpp into Audio.cpp,
+so all four hunks now live in one file; earlier revisions of this patch
+carried a second hunk against Config.cpp.
 
 --- a/libultraship/src/ship/audio/Audio.cpp
 +++ b/libultraship/src/ship/audio/Audio.cpp
@@ -17,7 +19,7 @@ AVAudioSession internally).
  #include "ship/audio/CoreAudioAudioPlayer.h"
  #endif
  
-@@ -20,7 +20,7 @@
+@@ -21,7 +21,7 @@
              mAudioPlayer = std::make_shared<WasapiAudioPlayer>(this->mAudioSettings);
              break;
  #endif
@@ -26,7 +28,7 @@ AVAudioSession internally).
          case AudioBackend::COREAUDIO:
              mAudioPlayer = std::make_shared<CoreAudioAudioPlayer>(this->mAudioSettings);
              break;
-@@ -45,7 +45,7 @@
+@@ -48,7 +48,7 @@
  #ifdef _WIN32
      mAvailableAudioBackends->push_back(AudioBackend::WASAPI);
  #endif
@@ -35,9 +37,7 @@ AVAudioSession internally).
      mAvailableAudioBackends->push_back(AudioBackend::COREAUDIO);
  #endif
      mAvailableAudioBackends->push_back(AudioBackend::SDL);
---- a/libultraship/src/ship/config/Config.cpp
-+++ b/libultraship/src/ship/config/Config.cpp
-@@ -261,7 +261,7 @@
+@@ -97,7 +97,7 @@
      return AudioBackend::WASAPI;
  #endif
  

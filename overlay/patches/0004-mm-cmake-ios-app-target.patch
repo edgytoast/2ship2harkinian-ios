@@ -168,7 +168,7 @@ $<TARGET_FILE_DIR> (mm/CMakeLists.txt:501-510), which lands inside the .app.
  elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
  	set_target_properties(${PROJECT_NAME} PROPERTIES
  	OUTPUT_NAME "2s2h.elf"
-@@ -346,7 +477,7 @@
+@@ -350,7 +481,7 @@
  endif()
  
  if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
@@ -177,7 +177,7 @@ $<TARGET_FILE_DIR> (mm/CMakeLists.txt:501-510), which lands inside the .app.
          target_compile_options(${PROJECT_NAME} PRIVATE
              -Wall -Wextra -Wno-error
              -Wno-return-type
-@@ -572,6 +703,52 @@
+@@ -593,6 +724,52 @@
      )
      target_include_directories(${PROJECT_NAME} PRIVATE
          ${DEVKITPRO}/portlibs/wiiu/include/
@@ -254,7 +254,7 @@ $<TARGET_FILE_DIR> (mm/CMakeLists.txt:501-510), which lands inside the .app.
 +	<key>CFBundleIconName</key>
 +	<string>AppIcon</string>
 +	<key>CFBundleShortVersionString</key>
-+	<string>1.0.1</string>
++	<string>1.1.0</string>
 +	<key>CFBundleVersion</key>
 +	<string>1</string>
 +	<key>LSRequiresIPhoneOS</key>

@@ -28,7 +28,7 @@ Vision Pro 4K ladder needs regardless.
 
 --- a/libultraship/include/fast/backends/gfx_rendering_api.h
 +++ b/libultraship/include/fast/backends/gfx_rendering_api.h
-@@ -83,6 +83,12 @@
+@@ -74,6 +74,12 @@
      virtual void* GetFramebufferTextureId(int fbId) = 0;
      virtual void SelectTextureFb(int fbId) = 0;
      virtual void DeleteTexture(uint32_t texId) = 0;
@@ -43,7 +43,7 @@ Vision Pro 4K ladder needs regardless.
      virtual void SetSrgbMode() = 0;
 --- a/libultraship/include/fast/backends/gfx_metal.h
 +++ b/libultraship/include/fast/backends/gfx_metal.h
-@@ -164,6 +164,7 @@
+@@ -169,6 +169,7 @@
      void* GetFramebufferTextureId(int fbId) override;
      void SelectTextureFb(int fbId) override;
      void DeleteTexture(uint32_t texId) override;
@@ -51,7 +51,7 @@ Vision Pro 4K ladder needs regardless.
      void SetTextureFilter(FilteringMode mode) override;
      FilteringMode GetTextureFilter() override;
      void SetSrgbMode() override;
-@@ -189,6 +190,9 @@
+@@ -195,6 +196,9 @@
          mShaderProgramPool;
  
      std::vector<struct TextureDataMetal> mTextures;
@@ -128,7 +128,7 @@ Vision Pro 4K ladder needs regardless.
  #include "fast/backends/gfx_metal_shader.h"
  
  #include "libultraship/libultra/abi.h"
-@@ -228,6 +286,112 @@
+@@ -237,6 +295,112 @@
      MTL::VertexDescriptor* vertex_descriptor =
          gfx_metal_build_shader(buf, numFloats, cc_features, mCurrentFilterMode == FILTER_THREE_POINT);
  
@@ -153,7 +153,7 @@ Vision Pro 4K ladder needs regardless.
 +    }
 +    LoadShader((struct ShaderProgram*)prg);
 +    const bool sohIosAsync =
-+        Ship::Context::GetInstance()->GetConsoleVariables()->GetInteger("gSohIos.AsyncShaders", 1) != 0;
++        Ship::Context::GetRawInstance()->GetConsoleVariables()->GetInteger("gSohIos.AsyncShaders", 1) != 0;
 +    // gfx_metal_build_shader autoreleases vertex_descriptor; retain it across
 +    // the (possibly deferred) compile — the compile lambda releases it.
 +    vertex_descriptor->retain();
@@ -241,11 +241,10 @@ Vision Pro 4K ladder needs regardless.
      NS::Error* error = nullptr;
      MTL::Library* library =
          mDevice->newLibrary(NS::String::string(buf.data(), NS::UTF8StringEncoding), nullptr, &error);
-@@ -261,20 +425,7 @@
-         pipeline_descriptor->colorAttachments()->object(0)->setBlendingEnabled(false);
+@@ -271,19 +435,6 @@
          pipeline_descriptor->colorAttachments()->object(0)->setWriteMask(MTL::ColorWriteMaskAll);
      }
--
+ 
 -    struct ShaderProgramMetal* prg = &mShaderProgramPool[std::make_pair(shader_id0, shader_id1)];
 -    prg->shader_id0 = shader_id0;
 -    prg->shader_id1 = shader_id1;
@@ -257,12 +256,12 @@ Vision Pro 4K ladder needs regardless.
 -    prg->usedTextures[5] = cc_features.used_blend[1];
 -    prg->numInputs = cc_features.numInputs;
 -    prg->numFloats = numFloats;
- 
+-
 -    // Prepoluate pipeline state cache with program and available msaa levels
      for (int i = 0; i < ARRAY_COUNT(mMsaaNumQualityLevels); i++) {
          if (mMsaaNumQualityLevels[i] == 1) {
              int msaa_level = i + 1;
-@@ -282,10 +433,6 @@
+@@ -291,10 +442,6 @@
              MTL::RenderPipelineState* pipeline_state = mDevice->newRenderPipelineState(pipeline_descriptor, &error);
  
              if (!pipeline_state || error != nullptr) {
@@ -273,15 +272,15 @@ Vision Pro 4K ladder needs regardless.
                  SPDLOG_ERROR("Failed to create pipeline state, error {}",
                               error->localizedDescription()->cString(NS::UTF8StringEncoding));
              }
-@@ -303,6 +450,7 @@
+@@ -312,6 +459,7 @@
      autorelease_pool->release();
  
      return (struct ShaderProgram*)prg;
 +#endif
  }
  
- struct ShaderProgram* GfxRenderingAPIMetal::LookupShader(uint64_t shader_id0, uint32_t shader_id1) {
-@@ -324,22 +472,81 @@
+ struct ShaderProgram* GfxRenderingAPIMetal::LookupShader(uint64_t shader_id0, uint64_t shader_id1) {
+@@ -345,26 +493,85 @@
  }
  
  void GfxRenderingAPIMetal::DeleteTexture(uint32_t texID) {
@@ -324,6 +323,10 @@ Vision Pro 4K ladder needs regardless.
 +static std::vector<MTL::Texture*> sSohIosPendingMips;
 +
  void GfxRenderingAPIMetal::UploadTexture(const uint8_t* rgba32_buf, uint32_t width, uint32_t height) {
+     if (width == 0 || height == 0) {
+         return;
+     }
+-
 +#ifdef __IOS__
 +    // SOH_IOS (overlay 0021): Metal aborts the process (no error return) if
 +    // a texture dimension exceeds the device limit. ImportTextureRaw's
@@ -332,9 +335,10 @@ Vision Pro 4K ladder needs regardless.
 +    // dying; the flattened bytes past the clamp are zero-fill/garbage by
 +    // construction. bytes_per_row keeps the SOURCE stride so a clamped
 +    // region stays row-correct.
-+    if (width == 0 || height == 0) {
-+        return;
-+    }
++    //
++    // The zero-dimension early-out this patch used to add here is now
++    // upstream's own (5.0.0), unconditional and above this block — so it is
++    // no longer duplicated in the iOS path.
 +    auto sohIosUpT0 = std::chrono::steady_clock::now();
 +    const uint32_t sohIosSrcWidth = width;
 +    const uint32_t sohIosMaxDim = (uint32_t)GetMaxTextureSize();
@@ -365,7 +369,7 @@ Vision Pro 4K ladder needs regardless.
      texture_descriptor->setSampleCount(1);
      texture_descriptor->setStorageMode(MTL::StorageModeShared);
  
-@@ -347,19 +554,68 @@
+@@ -372,19 +579,68 @@
  
      MTL::Texture* texture = texture_data->texture;
      if (texture_data->texture == nullptr || texture_data->texture->width() != width ||
@@ -436,7 +440,7 @@ Vision Pro 4K ladder needs regardless.
  }
  
  void GfxRenderingAPIMetal::SetSamplerParameters(int tile, bool linear_filter, uint32_t cms, uint32_t cmt) {
-@@ -515,10 +771,22 @@
+@@ -551,10 +807,22 @@
      }
  
      if (current_framebuffer.mLastShaderProgram != mShaderProgram) {
@@ -461,10 +465,10 @@ Vision Pro 4K ladder needs regardless.
          current_framebuffer.mCommandEncoder->setRenderPipelineState(pipeline_state);
      }
  
-@@ -566,8 +834,40 @@
- 
-     auto screen_framebuffer = mFramebuffers[0];
-     screen_framebuffer.mCommandEncoder->endEncoding();
+@@ -603,6 +871,26 @@
+     auto& screen_framebuffer = mFramebuffers[0];
+     if (!screen_framebuffer.mHasEndedEncoding)
+         screen_framebuffer.mCommandEncoder->endEncoding();
 +
 +    // SOH_IOS (overlay 0021 rev2): build mip chains for this frame's uploads
 +    // in ONE blit pass on the frame's own command buffer (see UploadTexture
@@ -485,7 +489,11 @@ Vision Pro 4K ladder needs regardless.
 +        }
 +        sSohIosPendingMips.clear();
 +    }
-+
+ 
+     // Deferred screen FB readback: blit the rendered texture into a shared
+     // MTLBuffer using a blit encoder (cheap DMA — no render pass boundary,
+@@ -634,6 +922,17 @@
+ 
      screen_framebuffer.mCommandBuffer->presentDrawable(mCurrentDrawable);
      mCurrentVertexBufferPoolIndex = (mCurrentVertexBufferPoolIndex + 1) % kMaxVertexBufferPoolSize;
 +#ifdef __IOS__
@@ -501,10 +509,10 @@ Vision Pro 4K ladder needs regardless.
 +#endif
      screen_framebuffer.mCommandBuffer->commit();
  
-     mDrawnFramebuffers.clear();
+     // Now that commit has been called, retain the command buffer for GPU sync
 --- a/libultraship/src/fast/interpreter.cpp
 +++ b/libultraship/src/fast/interpreter.cpp
-@@ -968,6 +968,43 @@
+@@ -1395,6 +1395,43 @@
              SPDLOG_ERROR("Invalid texture format. Fmt = {}", fmt);
              break;
      }
@@ -517,7 +525,7 @@ Vision Pro 4K ladder needs regardless.
 +    // pending draws are flushed before imports, so the front is never
 +    // referenced by unencoded work.
 +    {
-+        size_t sohIosBudget = (size_t)Ship::Context::GetInstance()->GetConsoleVariables()->GetInteger(
++        size_t sohIosBudget = (size_t)Ship::Context::GetRawInstance()->GetConsoleVariables()->GetInteger(
 +                                  "gSohIos.TexCacheBudgetMB", 1536) *
 +                              1024 * 1024;
 +        bool sohIosEvicted = false;

@@ -49,11 +49,11 @@ found on device. __IOS__-only.
 +        // SOH_IOS (overlay 0017): battery-saver cap — gSohIos.MaxFps combo
 +        // index 0 = 60 fps, 1 = 120 fps (default).
 +        uint32_t sohIosCap = CVarGetInteger("gSohIos.MaxFps", 1) == 0 ? 60 : 120;
-+        uint32_t sohIosRate = Ship::Context::GetInstance()->GetWindow()->GetCurrentRefreshRate();
++        uint32_t sohIosRate = Ship::Context::GetRawInstance()->GetWindow()->GetCurrentRefreshRate();
 +        return sohIosRate < sohIosCap ? sohIosRate : sohIosCap;
 +#else
-         return Ship::Context::GetInstance()->GetWindow()->GetCurrentRefreshRate();
+         return Ship::Context::GetRawInstance()->GetWindow()->GetCurrentRefreshRate();
 +#endif
      } else if (CVarGetInteger(CVAR_VSYNC_ENABLED, 1) ||
-                !Ship::Context::GetInstance()->GetWindow()->CanDisableVerticalSync()) {
-         return std::min<uint32_t>(Ship::Context::GetInstance()->GetWindow()->GetCurrentRefreshRate(),
+                !Ship::Context::GetRawInstance()->GetWindow()->CanDisableVerticalSync()) {
+         return std::min<uint32_t>(Ship::Context::GetRawInstance()->GetWindow()->GetCurrentRefreshRate(),

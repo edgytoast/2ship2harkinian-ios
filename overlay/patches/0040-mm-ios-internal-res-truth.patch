@@ -16,15 +16,15 @@ statement is wrapped, not just the slider tail.
 
 --- a/mm/2s2h/BenGui/BenMenu.cpp
 +++ b/mm/2s2h/BenGui/BenMenu.cpp
-@@ -525,6 +525,7 @@
+@@ -552,6 +552,7 @@
      AddWidget(path, "Toggle Fullscreen", WIDGET_BUTTON)
-         .Callback([](WidgetInfo& info) { Ship::Context::GetInstance()->GetWindow()->ToggleFullscreen(); })
+         .Callback([](WidgetInfo& info) { Ship::Context::GetRawInstance()->GetWindow()->ToggleFullscreen(); })
          .Options(ButtonOptions().Tooltip("Toggles Fullscreen On/Off."));
 +#ifndef __IOS__
      AddWidget(path, "Internal Resolution: %.0f%%", WIDGET_CVAR_SLIDER_FLOAT)
          .CVar(CVAR_INTERNAL_RESOLUTION)
          .Callback([](WidgetInfo& info) {
-@@ -549,6 +550,14 @@
+@@ -576,6 +577,14 @@
                  .Format("")
                  .Min(0.5f)
                  .Max(2.0f));
