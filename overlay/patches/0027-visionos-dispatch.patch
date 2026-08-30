@@ -17,7 +17,7 @@ builds (condition never true).
 @@ -6,6 +6,17 @@
  set(CMAKE_OSX_DEPLOYMENT_TARGET "10.15" CACHE STRING "Minimum OS X deployment version")
  set(GAME_STR "MM")
- project(2s2h VERSION 5.0.0 LANGUAGES C CXX)
+ project(2s2h VERSION 5.0.1 LANGUAGES C CXX)
 +
 +# SOH_IOS (overlay 0027): visionOS builds (PLATFORM=SIMULATOR_VISIONOS /
 +# VISIONOS) dispatch as iOS throughout the tree. Compilers and SDK are

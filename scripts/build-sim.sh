@@ -11,6 +11,7 @@ CONSOLE="${SOH_REMOTE_CONSOLE:-ON}"
 "$ROOT/scripts/apply-overlay.sh"
 [[ -f "$PREFIX/lib/libopusfile.a" ]] || SOH_IOS_SDK=simulator "$ROOT/scripts/build-audio-deps-ios.sh"
 [[ -f "$SHIP_O2R" ]] || "$ROOT/scripts/build-oracle.sh"
+"$ROOT/scripts/check-port-o2r.sh" "$SHIP_O2R"
 
 cmake --no-warn-unused-cli -S "$ROOT/vendor/2ship2harkinian" -B "$BUILD" -GXcode \
     -DCMAKE_XCODE_ATTRIBUTE_STRIP_INSTALLED_PRODUCT=NO \

@@ -12,7 +12,7 @@ Masters' native Majora's Mask port) and
 **Metal** — no translation layer. 100% vibe coded with lots of passion and attention
 to detail.
 
-Currently based on upstream **5.0.0 "Battler Alfa"**. This port carries its own version
+Currently based on upstream **5.0.1 "Battler Bravo"**. This port carries its own version
 number, so it can ship fixes between upstream releases.
 
 ![The Legend of Zelda: Majora's Mask on Apple Vision Pro](docs/screenshots/visionos-window.jpg)
